@@ -5,6 +5,7 @@ from .core.config import settings
 from .db.database import Base, engine
 from .routes.auth import router as auth_router
 from .routes.profile import router as profile_router
+from .routes.recipes import router as recipes_router
 
 app = FastAPI(title=settings.app_name)
 
@@ -29,3 +30,4 @@ def healthcheck() -> dict[str, str]:
 
 app.include_router(auth_router)
 app.include_router(profile_router)
+app.include_router(recipes_router)
