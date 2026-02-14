@@ -88,6 +88,15 @@ function FlowShell({
     navigate(`/app/${nextStep}`)
   }
 
+  const goToStep = (targetStep: FlowStepId) => {
+    const stepIndex = flowSteps.findIndex((entry) => entry.id === targetStep)
+    if (stepIndex === -1) return
+
+    setMaxUnlockedStepIndex((current) => Math.max(current, stepIndex))
+    setActiveStep(targetStep)
+    navigate(`/app/${targetStep}`)
+  }
+
   const goToUnlockedStep = (targetStep: FlowStepId) => {
     const stepIndex = flowSteps.findIndex((entry) => entry.id === targetStep)
     if (stepIndex <= maxUnlockedStepIndex) {
@@ -95,6 +104,8 @@ function FlowShell({
       navigate(`/app/${targetStep}`)
     }
   }
+
+  const isFoodFlowActive = ['input', 'result', 'changes', 'refine', 'meals'].includes(activeStep)
 
   const renderActiveStep = () => {
     if (isRestoringSession) {
@@ -156,23 +167,26 @@ function FlowShell({
         {session ? (
           <>
             <div className="mx-auto mb-6 flex w-fit flex-wrap justify-center gap-2 rounded-lg border-2 border-[#a95f77] bg-[#ffe5ed] p-2 shadow-[4px_4px_0px_#a95f77]">
-              {flowSteps.map((stepEntry) => {
-                const stepIndex = flowSteps.findIndex((entry) => entry.id === stepEntry.id)
-                return (
-                  <button
-                    key={stepEntry.id}
-                    onClick={() => goToUnlockedStep(stepEntry.id)}
-                    disabled={stepIndex > maxUnlockedStepIndex}
-                    className={`rounded-md border-2 px-3 py-1 text-xs font-semibold ${
-                      activeStep === stepEntry.id
-                        ? 'border-[#7e3f55] bg-[#ff9fbc] text-[#3f1725]'
-                        : 'border-[#c8849c] bg-[#fff1f6] text-[#7e3f55]'
-                    }`}
-                  >
-                    {stepEntry.label}
-                  </button>
-                )
-              })}
+              <button
+                onClick={() => goToStep('input')}
+                className={`rounded-md border-2 px-3 py-1 text-xs font-semibold ${
+                  isFoodFlowActive
+                    ? 'border-[#7e3f55] bg-[#ff9fbc] text-[#3f1725]'
+                    : 'border-[#c8849c] bg-[#fff1f6] text-[#7e3f55]'
+                }`}
+              >
+                Food Input
+              </button>
+              <button
+                onClick={() => goToStep('onboarding')}
+                className={`rounded-md border-2 px-3 py-1 text-xs font-semibold ${
+                  activeStep === 'onboarding'
+                    ? 'border-[#7e3f55] bg-[#ff9fbc] text-[#3f1725]'
+                    : 'border-[#c8849c] bg-[#fff1f6] text-[#7e3f55]'
+                }`}
+              >
+                Profile
+              </button>
               <button
                 onClick={() => {
                   setSession(null)
@@ -184,30 +198,50 @@ function FlowShell({
                 Logout
               </button>
             </div>
+            {activeStep === 'onboarding' ? (
+              <PixelCard className="mb-6 bg-[#fff1f6] p-3 text-sm">
+                <p className="font-bold">Session</p>
+                <p className="mt-1 text-[#6b374b]">[USER] {session.email}</p>
 
-            <PixelCard className="mb-6 bg-[#fff1f6] p-3 text-sm">
-              <p className="font-bold">Session</p>
-              <p className="mt-1 text-[#6b374b]">[USER] {session.email}</p>
-
-              <p className="mt-3 font-bold">Profile Context</p>
-              <p className="mt-1 text-[#6b374b]">
-                [GOAL] {profile.goal || 'Not set'} | [ACTIVITY] {profile.activity_level || 'Not set'}
-              </p>
-              <p className="mt-1 text-[#6b374b]">
-                [DIET] {profile.dietary_preferences || 'Not set'} | [CARB] {profile.carb_sensitivity || 'Not set'}
-              </p>
-              <p className="mt-1 text-[#6b374b]">
-                [PCOS] {profile.pcos_concerns.length ? profile.pcos_concerns.join(', ') : 'Not set'}
-              </p>
-              <p className="mt-1 text-[#6b374b]">
-                [ALLERGIES] {profile.allergies.length ? profile.allergies.join(', ') : 'Not set'}
-              </p>
-              {foodInput.useHomeIngredients ? (
+                <p className="mt-3 font-bold">Profile Context</p>
                 <p className="mt-1 text-[#6b374b]">
-                  [PANTRY] {foodInput.homeIngredients.length ? foodInput.homeIngredients.join(', ') : 'No ingredients entered yet'}
+                  [GOAL] {profile.goal || 'Not set'} | [ACTIVITY] {profile.activity_level || 'Not set'}
                 </p>
-              ) : null}
-            </PixelCard>
+                <p className="mt-1 text-[#6b374b]">
+                  [DIET] {profile.dietary_preferences || 'Not set'} | [CARB] {profile.carb_sensitivity || 'Not set'}
+                </p>
+                <p className="mt-1 text-[#6b374b]">
+                  [PCOS] {profile.pcos_concerns.length ? profile.pcos_concerns.join(', ') : 'Not set'}
+                </p>
+                <p className="mt-1 text-[#6b374b]">
+                  [ALLERGIES] {profile.allergies.length ? profile.allergies.join(', ') : 'Not set'}
+                </p>
+              </PixelCard>
+            ) : null}
+
+            {isFoodFlowActive ? (
+              <div className="mx-auto mb-6 flex w-fit flex-wrap justify-center gap-2 rounded-lg border-2 border-[#c8849c] bg-[#fff1f6] p-2 shadow-[3px_3px_0px_#c8849c]">
+                {flowSteps
+                  .filter((step) => step.id !== 'onboarding')
+                  .map((stepEntry) => {
+                    const stepIndex = flowSteps.findIndex((entry) => entry.id === stepEntry.id)
+                    return (
+                      <button
+                        key={stepEntry.id}
+                        onClick={() => goToUnlockedStep(stepEntry.id)}
+                        disabled={stepIndex > maxUnlockedStepIndex}
+                        className={`rounded-md border-2 px-3 py-1 text-xs font-semibold ${
+                          activeStep === stepEntry.id
+                            ? 'border-[#7e3f55] bg-[#ff9fbc] text-[#3f1725]'
+                            : 'border-[#c8849c] bg-[#fff7fa] text-[#7e3f55]'
+                        }`}
+                      >
+                        {stepEntry.label}
+                      </button>
+                    )
+                  })}
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>
