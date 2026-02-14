@@ -9,9 +9,9 @@ from ..core.config import settings
 
 class RecipeDbClient:
   def __init__(self) -> None:
-    self.base_url = settings.foodoscope_base_url.rstrip("/")
-    self.timeout = settings.foodoscope_timeout_seconds
-    self.api_key = settings.foodoscope_api_key
+    self.base_url = settings.rdb2_base_url.rstrip("/")
+    self.timeout = settings.rdb2_timeout_seconds
+    self.api_key = settings.rdb2_api_key
 
   async def get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     return await self._request("GET", endpoint, params=params)
@@ -27,17 +27,10 @@ class RecipeDbClient:
     json: dict[str, Any] | None = None,
   ) -> dict[str, Any]:
     url = f"{self.base_url}/{endpoint.lstrip('/')}"
-    headers = {
-      "ApiKey": self.api_key,
-      "apikey": self.api_key,
-      "x-api-key": self.api_key,
-      "Authorization": f"Bearer {self.api_key}",
-    }
+    # RDB2 Postman collection auth:
+    # Authorization: Bearer {{apiKey}}
+    headers = {"Authorization": f"Bearer {self.api_key}"}
     request_params = dict(params or {})
-    request_params.setdefault("apiKey", self.api_key)
-    request_params.setdefault("ApiKey", self.api_key)
-    request_params.setdefault("apikey", self.api_key)
-    request_params.setdefault("api_key", self.api_key)
 
     async with httpx.AsyncClient(timeout=self.timeout) as client:
       response = await client.request(

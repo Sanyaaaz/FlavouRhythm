@@ -54,7 +54,7 @@ async def recipe_of_day() -> dict[str, Any]:
   return await _proxy_get("/recipe2-api/recipe/recipeofday")
 
 
-@router.get("/recipe-bytitle/recipeByTitle")
+@router.get("/recipe/recipebytitle")
 async def recipe_by_title(title: str = Query(..., min_length=1)) -> dict[str, Any]:
   return await _proxy_get("/recipe2-api/recipe/recipebytitle", params={"title": title})
 
