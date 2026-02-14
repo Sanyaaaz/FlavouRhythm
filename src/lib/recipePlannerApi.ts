@@ -133,14 +133,15 @@ function buildSearchSignals(desire: string): {
   flavorQueries: string[]
   regionQueries: string[]
 } {
+  const raw = desire.trim()
   const normalized = normalizeQuery(desire)
   if (!normalized) {
     return { titleQueries: [], keywordQueries: [], flavorQueries: [], regionQueries: [] }
   }
 
   const terms = normalized.split(' ').filter((term) => !STOPWORDS.has(term))
-  const titleQueries = unique([normalized, terms.join(' '), ...terms.filter((term) => term.length >= 4)]).slice(0, 4)
-  const keywordQueries = unique([normalized, ...terms.filter((term) => term.length >= 4)]).slice(0, 4)
+  const titleQueries = unique([raw, normalized, terms.join(' '), ...terms.filter((term) => term.length >= 4)]).slice(0, 5)
+  const keywordQueries = unique([raw, normalized, ...terms.filter((term) => term.length >= 4)]).slice(0, 5)
 
   const flavorQueries = unique(
     terms.filter((term) => FLAVOR_KEYWORDS.has(term) || (term.endsWith('y') && term.length >= 5)),
@@ -168,9 +169,13 @@ function getRecipeArray(body: unknown): RawRecipe[] {
   if (asRecord.payload && typeof asRecord.payload === 'object') {
     const payload = asRecord.payload as Record<string, unknown>
     if (Array.isArray(payload.data)) return payload.data as RawRecipe[]
+    if (payload.data && typeof payload.data === 'object') return [payload.data as RawRecipe]
     if (Array.isArray(payload.recipes)) return payload.recipes as RawRecipe[]
+    if (payload.recipe && typeof payload.recipe === 'object') return [payload.recipe as RawRecipe]
   }
   if (Array.isArray(asRecord.data)) return asRecord.data as RawRecipe[]
+  if (asRecord.data && typeof asRecord.data === 'object') return [asRecord.data as RawRecipe]
+  if (asRecord.recipe && typeof asRecord.recipe === 'object') return [asRecord.recipe as RawRecipe]
   return []
 }
 
