@@ -11,7 +11,7 @@ export type AuthTokenResponse = {
   user: AuthUser
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+const API_BASE_URL = resolveApiBaseUrl()
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -68,3 +68,4 @@ export async function me(token: string): Promise<AuthUser> {
 
   return (await response.json()) as AuthUser
 }
+import { resolveApiBaseUrl } from './apiBaseUrl'

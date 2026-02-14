@@ -1,14 +1,16 @@
 import { PixelButton, PixelCard, PixelShell } from '../components/PixelPrimitives'
-
-const originalItems = ['[WRAP] Refined flour wrap', '[SYRUP] High sugar sauce', '[FRY] Deep-fried filling']
-const adaptedItems = ['[MILLET] Millet-chickpea wrap', '[YOGURT] Yogurt herb drizzle', '[SAUTE] Air-seared protein + veggies']
-const triggersAddressed = ['Blood sugar spike', 'Inflammatory oils', 'Low fiber fullness gap']
+import type { RecipeChanges } from '../lib/recipePlannerApi'
 
 type WhatChangedScreenProps = {
+  changes: RecipeChanges | null
   onContinue: () => void
 }
 
-export default function WhatChangedScreen({ onContinue }: WhatChangedScreenProps) {
+export default function WhatChangedScreen({ changes, onContinue }: WhatChangedScreenProps) {
+  const originalItems = changes?.originalItems ?? []
+  const adaptedItems = changes?.adaptedItems ?? []
+  const triggersAddressed = changes?.triggersAddressed ?? []
+
   return (
     <PixelShell title="What changed" subtitle="See the exact swaps between your original craving and the adapted version.">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -43,9 +45,7 @@ export default function WhatChangedScreen({ onContinue }: WhatChangedScreenProps
 
         <div className="rounded-lg border-[3px] border-[#b46a83] bg-[#ffdfe8] p-3 text-sm">
           <p className="font-bold">Why this works for PCOS</p>
-          <p className="mt-1 text-[#6b374b]">
-            This version increases protein, adds fiber, and reduces high-glycemic elements to support insulin sensitivity.
-          </p>
+          <p className="mt-1 text-[#6b374b]">{changes?.whyItWorks ?? 'Create an adaptation to see swap rationale.'}</p>
         </div>
 
         <PixelButton className="mt-4 w-full" onClick={onContinue}>

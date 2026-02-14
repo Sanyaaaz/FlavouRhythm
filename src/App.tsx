@@ -11,6 +11,13 @@ import RefinementChatScreen from './screens/RefinementChatScreen'
 import CravingAwareMealsScreen from './screens/CravingAwareMealsScreen'
 import { me } from './lib/authApi'
 import type { UserProfilePayload } from './lib/profileApi'
+import {
+  adaptRecipeForPcos,
+  fetchMicroMealPlan,
+  type AdaptedRecipe,
+  type MicroMealPlanDay,
+  type RecipeChanges,
+} from './lib/recipePlannerApi'
 
 type FlowStepId = 'onboarding' | 'input' | 'result' | 'changes' | 'refine' | 'meals'
 
@@ -44,21 +51,27 @@ function FlowShell({
   isRestoringSession,
   profile,
   setProfile,
-  foodInput,
-  setFoodInput,
 }: {
   session: SessionState | null
   setSession: (value: SessionState | null) => void
   isRestoringSession: boolean
   profile: UserProfilePayload
   setProfile: (value: UserProfilePayload) => void
-  foodInput: { desire: string; useHomeIngredients: boolean; homeIngredients: string[] }
-  setFoodInput: (value: { desire: string; useHomeIngredients: boolean; homeIngredients: string[] }) => void
 }) {
   const navigate = useNavigate()
   const { step } = useParams()
   const [activeStep, setActiveStep] = useState<FlowStepId>('onboarding')
   const [maxUnlockedStepIndex, setMaxUnlockedStepIndex] = useState(0)
+  const [, setFoodInput] = useState({
+    desire: '',
+    useHomeIngredients: false,
+    homeIngredients: [] as string[],
+  })
+  const [isAdaptingRecipe, setIsAdaptingRecipe] = useState(false)
+  const [adaptError, setAdaptError] = useState('')
+  const [adaptedRecipe, setAdaptedRecipe] = useState<AdaptedRecipe | null>(null)
+  const [recipeChanges, setRecipeChanges] = useState<RecipeChanges | null>(null)
+  const [microMealPlan, setMicroMealPlan] = useState<MicroMealPlanDay[]>([])
 
   useEffect(() => {
     if (!session && !isRestoringSession) {
@@ -142,20 +155,47 @@ function FlowShell({
       case 'input':
         return (
           <HomeInputScreen
-            onAdapt={(payload) => {
+            isLoading={isAdaptingRecipe}
+            error={adaptError}
+            onAdapt={async (payload) => {
+              setAdaptError('')
               setFoodInput(payload)
-              unlockAndGoTo('result')
+              setIsAdaptingRecipe(true)
+              try {
+                const plannerProfile = {
+                  region: profile.preferred_cuisines[0] || profile.dietary_preferences || 'Global',
+                  focus: profile.goal || profile.carb_sensitivity || 'General management',
+                  dietaryRestrictions: [profile.dietary_preferences].filter(Boolean),
+                  allergyNotes: [profile.allergies.join(', '), profile.custom_allergy || ''].filter(Boolean).join(', '),
+                }
+                const result = await adaptRecipeForPcos(payload, plannerProfile)
+                setAdaptedRecipe(result.recipe)
+                setRecipeChanges(result.changes)
+                const plan = await fetchMicroMealPlan(payload, plannerProfile).catch(() => [])
+                setMicroMealPlan(plan)
+                unlockAndGoTo('result')
+              } catch (error) {
+                setAdaptError(error instanceof Error ? error.message : 'Unable to adapt recipe right now.')
+              } finally {
+                setIsAdaptingRecipe(false)
+              }
             }}
           />
         )
       case 'result':
-        return <ResultScreen onWhatChanged={() => unlockAndGoTo('changes')} onRefine={() => unlockAndGoTo('refine')} />
+        return (
+          <ResultScreen
+            recipe={adaptedRecipe}
+            onWhatChanged={() => unlockAndGoTo('changes')}
+            onRefine={() => unlockAndGoTo('refine')}
+          />
+        )
       case 'changes':
-        return <WhatChangedScreen onContinue={() => unlockAndGoTo('refine')} />
+        return <WhatChangedScreen changes={recipeChanges} onContinue={() => unlockAndGoTo('refine')} />
       case 'refine':
         return <RefinementChatScreen onContinue={() => unlockAndGoTo('meals')} />
       case 'meals':
-        return <CravingAwareMealsScreen />
+        return <CravingAwareMealsScreen mealPlan={microMealPlan} />
       default:
         return null
     }
@@ -288,11 +328,6 @@ function App() {
     carb_sensitivity: '',
     meal_style: '',
   })
-  const [foodInput, setFoodInput] = useState({
-    desire: '',
-    useHomeIngredients: false,
-    homeIngredients: [] as string[],
-  })
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -363,8 +398,6 @@ function App() {
               isRestoringSession={isRestoringSession}
               profile={profile}
               setProfile={setProfile}
-              foodInput={foodInput}
-              setFoodInput={setFoodInput}
             />
           }
         />

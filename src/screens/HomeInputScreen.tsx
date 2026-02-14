@@ -15,16 +15,18 @@ type HomeInputScreenProps = {
     desire: string
     useHomeIngredients: boolean
     homeIngredients: string[]
-  }) => void
+  }) => Promise<void> | void
+  isLoading?: boolean
+  error?: string
 }
 
-export default function HomeInputScreen({ onAdapt }: HomeInputScreenProps) {
+export default function HomeInputScreen({ onAdapt, isLoading = false, error = '' }: HomeInputScreenProps) {
   const [query, setQuery] = useState('')
   const [selectedChip, setSelectedChip] = useState('')
   const [useHomeIngredients, setUseHomeIngredients] = useState(false)
   const [homeIngredientsText, setHomeIngredientsText] = useState('')
 
-  const handleAdapt = () => {
+  const handleAdapt = async () => {
     const homeIngredients = useHomeIngredients
       ? homeIngredientsText
           .split(/[\n,]/)
@@ -32,7 +34,7 @@ export default function HomeInputScreen({ onAdapt }: HomeInputScreenProps) {
           .filter(Boolean)
       : []
 
-    onAdapt({
+    await onAdapt({
       desire: query.trim() || selectedChip,
       useHomeIngredients,
       homeIngredients,
@@ -91,8 +93,17 @@ export default function HomeInputScreen({ onAdapt }: HomeInputScreenProps) {
           </div>
         ) : null}
 
-        <PixelButton className="w-full py-4 text-base" onClick={handleAdapt}>
-          Adapt for PCOS
+        {error ? <p className="text-sm font-semibold text-[#8c1d40]">{error}</p> : null}
+
+        <PixelButton
+          className={`w-full py-4 text-base ${isLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+          onClick={() => {
+            if (!isLoading) {
+              void handleAdapt()
+            }
+          }}
+        >
+          {isLoading ? 'Adapting recipe...' : 'Adapt for PCOS'}
         </PixelButton>
       </PixelCard>
     </PixelShell>
