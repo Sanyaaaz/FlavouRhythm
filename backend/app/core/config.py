@@ -18,6 +18,17 @@ class Settings(BaseSettings):
     default=20.0,
     validation_alias=AliasChoices("RDB2_TIMEOUT_SECONDS", "FOODOSCOPE_TIMEOUT_SECONDS"),
   )
+  flavordb_auth_token: str = Field(
+    validation_alias=AliasChoices("FLAVORDB_AUTH_TOKEN", "RDB2_API_KEY", "FOODOSCOPE_API_KEY"),
+  )
+  flavordb_base_url: str = Field(
+    default="http://cosylab.iiitd.edu.in:6969/flavordb",
+    validation_alias=AliasChoices("FLAVORDB_BASE_URL"),
+  )
+  flavordb_timeout_seconds: float = Field(
+    default=20.0,
+    validation_alias=AliasChoices("FLAVORDB_TIMEOUT_SECONDS"),
+  )
 
   model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

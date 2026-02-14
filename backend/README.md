@@ -18,6 +18,11 @@ RecipeDB uses the Postman collection variables:
 
 Auth forwarded upstream: `Authorization: Bearer <apiKey>`.
 
+FlavorDB uses:
+- `FLAVORDB_BASE_URL` (default: `http://cosylab.iiitd.edu.in:6969/flavordb`)
+- `FLAVORDB_AUTH_TOKEN`
+- `FLAVORDB_TIMEOUT_SECONDS`
+
 ## Run
 
 ```bash
@@ -52,3 +57,15 @@ All auth responses return JWT bearer token and user details.
 - `GET /recipe2-api/recipe/recipenutritioninfo?recipe_id=<id>`
 - `GET /recipe2-api/recipe/recipemicronutritioninfo?recipe_id=<id>`
 - `POST /recipe2-api/recipe/recipemealplan`
+
+## FlavorDB APIs
+
+- `GET /flavordb/food/by-alias?food_pair=<name>`
+- `GET /flavordb/entities/by-natural-source?naturalSource=<source>&page=<n>&size=<n>`
+- `GET /flavordb/entities/by-name-and-category?name=<name>&category=<category>&page=<n>&size=<n>`
+- `GET /flavordb/entities/by-readable-name?aliasReadable=<alias>&page=<n>&size=<n>`
+- `GET /flavordb/molecules/by-flavor-profile?flavorProfile=<profile>&page=<n>&size=<n>`
+- `GET /flavordb/molecules/by-common-name?commonName=<name>&page=<n>&size=<n>`
+- `GET /flavordb/molecules/by-functional-groups?functional_groups=<group>&page=<n>&size=<n>`
+- `GET /flavordb/properties/by-description?description=<text>&page=<n>&size=<n>`
+- `GET /flavordb/properties/taste-threshold?values=<text>&page=<n>&size=<n>`
