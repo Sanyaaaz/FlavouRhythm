@@ -64,8 +64,13 @@ function FlowShell({
   const [maxUnlockedStepIndex, setMaxUnlockedStepIndex] = useState(0)
   const [, setFoodInput] = useState({
     desire: '',
+    selectedIntent: '',
     useHomeIngredients: false,
     homeIngredients: [] as string[],
+    minCalories: null as number | null,
+    maxCalories: null as number | null,
+    minProtein: null as number | null,
+    maxProtein: null as number | null,
   })
   const [isAdaptingRecipe, setIsAdaptingRecipe] = useState(false)
   const [adaptError, setAdaptError] = useState('')
@@ -167,6 +172,12 @@ function FlowShell({
                   focus: profile.goal || profile.carb_sensitivity || 'General management',
                   dietaryRestrictions: [profile.dietary_preferences].filter(Boolean),
                   allergyNotes: [profile.allergies.join(', '), profile.custom_allergy || ''].filter(Boolean).join(', '),
+                  deficiencies: [profile.deficiencies.join(', '), profile.custom_deficiency || '']
+                    .filter(Boolean)
+                    .join(', ')
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
                 }
                 const result = await adaptRecipeForPcos(payload, plannerProfile)
                 setAdaptedRecipe(result.recipe)
@@ -193,7 +204,12 @@ function FlowShell({
       case 'changes':
         return <WhatChangedScreen changes={recipeChanges} onContinue={() => unlockAndGoTo('refine')} />
       case 'refine':
-        return <RefinementChatScreen onContinue={() => unlockAndGoTo('meals')} />
+        return (
+          <RefinementChatScreen
+            recipe={adaptedRecipe}
+            onContinue={() => unlockAndGoTo('meals')}
+          />
+        )
       case 'meals':
         return <CravingAwareMealsScreen mealPlan={microMealPlan} />
       default:
