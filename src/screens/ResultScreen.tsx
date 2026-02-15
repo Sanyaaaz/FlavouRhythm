@@ -10,6 +10,7 @@ type ResultScreenProps = {
 
 export default function ResultScreen({ recipe, onWhatChanged, onRefine }: ResultScreenProps) {
   const [showRecipeModal, setShowRecipeModal] = useState(false)
+  const [showSwapPanel, setShowSwapPanel] = useState(false)
 
   if (!recipe) {
     return (
@@ -54,6 +55,12 @@ export default function ResultScreen({ recipe, onWhatChanged, onRefine }: Result
     { key: 'diet', text: `Type: ${dietType}`, value: dietType, icon: getDietIcon(dietType) },
     { key: 'serves', text: `Serves: ${serves}`, value: serves.replace(' people', 'p'), icon: 'S' },
   ]
+  const glycemicBadgeClass =
+    recipe.glycemicLoadBand === 'Low GL'
+      ? 'border-[#5a9c6d] bg-[#e7ffef] text-[#1d5a33]'
+      : recipe.glycemicLoadBand === 'High GL'
+        ? 'border-[#b24d67] bg-[#fff0f4] text-[#7b2a43]'
+        : 'border-[#c8849c] bg-[#fff2f7] text-[#6b374b]'
 
   const renderFactChip = (fact: (typeof quickFacts)[number], keyPrefix = '') => (
     <span key={`${keyPrefix}${fact.key}`} className="group relative inline-flex">
@@ -87,6 +94,12 @@ export default function ResultScreen({ recipe, onWhatChanged, onRefine }: Result
               </PixelButton>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">{quickFacts.map((fact) => renderFactChip(fact))}</div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`rounded-md border-2 px-2 py-1 text-xs font-bold ${glycemicBadgeClass}`}>
+                [GL] {recipe.glycemicLoadBand}
+              </span>
+              <span className="text-xs text-[#6b374b]">{recipe.glycemicLoadNote}</span>
+            </div>
             <p className="mt-3 text-sm text-[#5a2c3f]">{recipe.description}</p>
           </div>
 
@@ -106,6 +119,31 @@ export default function ResultScreen({ recipe, onWhatChanged, onRefine }: Result
                   </p>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {recipe.swapSuggestions.length ? (
+            <div className="space-y-2 rounded-md border-2 border-[#ca8aa2] bg-[#fff3f7] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#7e3f55]">[SWAP BUILDER] Taste-Preserving</p>
+                <PixelButton
+                  className="px-3 py-2 text-xs"
+                  onClick={() => {
+                    setShowSwapPanel((current) => !current)
+                  }}
+                >
+                  {showSwapPanel ? 'Hide swaps' : 'Show swaps'}
+                </PixelButton>
+              </div>
+              {showSwapPanel ? (
+                <ul className="space-y-2 text-xs text-[#5d2b3a]">
+                  {recipe.swapSuggestions.map((swap) => (
+                    <li key={`${swap.from}-${swap.to}`} className="rounded-md border border-[#d9a8ba] bg-[#fff9fb] px-2 py-2">
+                      <span className="font-bold">{swap.from}</span> {'->'} <span className="font-bold">{swap.to}</span> ({swap.reason})
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
 

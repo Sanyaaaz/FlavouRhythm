@@ -72,6 +72,7 @@ function FlowShell({
     maxCalories: null as number | null,
     minProtein: null as number | null,
     maxProtein: null as number | null,
+    symptomFocus: null as string | null,
   })
   const [isAdaptingRecipe, setIsAdaptingRecipe] = useState(false)
   const [adaptError, setAdaptError] = useState('')

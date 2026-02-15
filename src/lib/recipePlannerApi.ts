@@ -17,6 +17,7 @@ type PlannerInput = {
   maxCalories: number | null
   minProtein: number | null
   maxProtein: number | null
+  symptomFocus: SymptomFocus | null
 }
 
 type RawRecipe = Record<string, unknown>
@@ -49,6 +50,9 @@ export type AdaptedRecipe = {
   instructions: string[]
   micronutrients: MicronutrientEntry[]
   nutrientHighlight: NutrientHighlight | null
+  glycemicLoadBand: 'Low GL' | 'Moderate GL' | 'High GL'
+  glycemicLoadNote: string
+  swapSuggestions: SwapSuggestion[]
   flavorSatisfaction: number
   pcosSafety: number
   tags: string[]
@@ -81,6 +85,16 @@ type FlavorSwapSuggestion = {
   to: string
   reason: string
 }
+
+export type SwapSuggestion = FlavorSwapSuggestion
+export type SymptomFocus =
+  | 'none'
+  | 'insulin_spike'
+  | 'bloating'
+  | 'fatigue'
+  | 'acne'
+  | 'period_cramps'
+  | 'sugar_cravings'
 
 const API_BASE_URL = resolveApiBaseUrl()
 const STOPWORDS = new Set([
@@ -163,6 +177,55 @@ const DEFICIENCY_NUTRIENT_TOKENS: Record<string, string[]> = {
   anemia: ['iron', 'folate', 'vitamin b12'],
 }
 
+const SYMPTOM_CONFIG: Record<
+  Exclude<SymptomFocus, 'none'>,
+  {
+    label: string
+    searchTerms: string[]
+    titleTokens: string[]
+    maxCarbs?: number
+    minProtein?: number
+  }
+> = {
+  insulin_spike: {
+    label: 'Insulin Spike Support',
+    searchTerms: ['low carb', 'high protein', 'fiber'],
+    titleTokens: ['millet', 'oats', 'chickpea', 'lentil', 'salad', 'grilled'],
+    maxCarbs: 30,
+    minProtein: 18,
+  },
+  bloating: {
+    label: 'Bloating Relief Support',
+    searchTerms: ['light', 'soup', 'easy digest'],
+    titleTokens: ['soup', 'stew', 'grilled', 'steamed', 'sauteed'],
+    maxCarbs: 45,
+  },
+  fatigue: {
+    label: 'Fatigue Support',
+    searchTerms: ['high protein', 'iron', 'energy'],
+    titleTokens: ['egg', 'paneer', 'chickpea', 'lentil', 'beans', 'spinach'],
+    minProtein: 20,
+  },
+  acne: {
+    label: 'Acne-safe Support',
+    searchTerms: ['anti inflammatory', 'low sugar', 'omega'],
+    titleTokens: ['salad', 'bowl', 'grilled', 'seeds', 'nuts'],
+    maxCarbs: 40,
+  },
+  period_cramps: {
+    label: 'Period Cramp Support',
+    searchTerms: ['iron rich', 'magnesium', 'anti inflammatory'],
+    titleTokens: ['spinach', 'sesame', 'lentil', 'beans', 'nuts'],
+  },
+  sugar_cravings: {
+    label: 'Sugar Craving Balance',
+    searchTerms: ['high protein snack', 'low gi', 'sweet healthy'],
+    titleTokens: ['dark chocolate', 'chia', 'yogurt', 'nuts', 'berries'],
+    maxCarbs: 35,
+    minProtein: 15,
+  },
+}
+
 const MICRONUTRIENT_KEYWORDS = [
   'iron',
   'calcium',
@@ -216,6 +279,16 @@ function normalizeDeficiency(deficiency: string): string {
   return normalized
 }
 
+function normalizeSymptomFocus(value: SymptomFocus | null): Exclude<SymptomFocus, 'none'> | null {
+  if (!value || value === 'none') return null
+  return value
+}
+
+function getSymptomConfig(value: SymptomFocus | null) {
+  const normalized = normalizeSymptomFocus(value)
+  return normalized ? SYMPTOM_CONFIG[normalized] : null
+}
+
 function getDeficiencyTargets(deficiencies: string[]): string[] {
   return unique(deficiencies.map(normalizeDeficiency).filter(Boolean))
 }
@@ -248,6 +321,20 @@ function recipeMatchesIntent(raw: RawRecipe, intentTerms: string[]): boolean {
 function filterByIntent(rawRecipes: RawRecipe[], intentTerms: string[]): RawRecipe[] {
   if (!intentTerms.length) return rawRecipes
   return rawRecipes.filter((recipe) => recipeMatchesIntent(recipe, intentTerms))
+}
+
+function recipeMatchesSymptom(raw: RawRecipe, symptomValue: SymptomFocus | null): boolean {
+  const symptom = getSymptomConfig(symptomValue)
+  if (!symptom) return true
+  const haystack = JSON.stringify(raw).toLowerCase()
+  return symptom.titleTokens.some((token) => haystack.includes(token))
+}
+
+function filterBySymptom(rawRecipes: RawRecipe[], symptomValue: SymptomFocus | null): RawRecipe[] {
+  const symptom = getSymptomConfig(symptomValue)
+  if (!symptom) return rawRecipes
+  const matches = rawRecipes.filter((recipe) => recipeMatchesSymptom(recipe, symptomValue))
+  return matches.length ? matches : rawRecipes
 }
 
 function buildSearchSignals(desire: string): {
@@ -355,6 +442,9 @@ function normalizeRecipe(raw: RawRecipe): AdaptedRecipe {
     instructions: [],
     micronutrients: [],
     nutrientHighlight: null,
+    glycemicLoadBand: 'Moderate GL',
+    glycemicLoadNote: 'Balanced carbs and protein target a moderate glycemic response.',
+    swapSuggestions: [],
     flavorSatisfaction: 82,
     pcosSafety: 85,
     tags: [region, 'PCOS Friendly'],
@@ -428,7 +518,13 @@ function titleWordMatchCount(title: string, query: string): number {
   return matches
 }
 
-function scoreRecipe(recipe: AdaptedRecipe, pantryMatch: number, desire: string, intentTerms: string[]): number {
+function scoreRecipe(
+  recipe: AdaptedRecipe,
+  pantryMatch: number,
+  desire: string,
+  intentTerms: string[],
+  symptomValue: SymptomFocus | null,
+): number {
   let score = 0
   score += pantryMatch * 12
   score += titleWordMatchCount(recipe.name, desire) * 30
@@ -438,7 +534,54 @@ function scoreRecipe(recipe: AdaptedRecipe, pantryMatch: number, desire: string,
   if (recipe.protein !== null) score += Math.min(recipe.protein, 35)
   if (recipe.carbs !== null) score -= Math.max(recipe.carbs - 45, 0) * 0.5
   if (recipe.calories !== null) score -= Math.max(recipe.calories - 550, 0) * 0.03
+
+  const symptom = getSymptomConfig(symptomValue)
+  if (symptom) {
+    const symptomHits = symptom.titleTokens.reduce((count, token) => (loweredName.includes(token) ? count + 1 : count), 0)
+    score += symptomHits * 14
+    if (recipe.carbs !== null && symptom.maxCarbs !== undefined) {
+      score += recipe.carbs <= symptom.maxCarbs ? 24 : -24
+    }
+    if (recipe.protein !== null && symptom.minProtein !== undefined) {
+      score += recipe.protein >= symptom.minProtein ? 18 : -12
+    }
+  }
+
   return score
+}
+
+function estimateGlycemicLoad(
+  carbs: number | null,
+  protein: number | null,
+): { band: AdaptedRecipe['glycemicLoadBand']; note: string } {
+  if (carbs === null) {
+    return {
+      band: 'Moderate GL',
+      note: 'Carbs were unavailable, so glycemic load is estimated as moderate.',
+    }
+  }
+
+  const proteinGuard = protein ?? 0
+  const adjustedCarbLoad = Math.max(0, carbs - proteinGuard * 0.35)
+
+  if (adjustedCarbLoad <= 20) {
+    return {
+      band: 'Low GL',
+      note: 'Lower adjusted carb load with protein support favors steadier glucose response.',
+    }
+  }
+
+  if (adjustedCarbLoad <= 35) {
+    return {
+      band: 'Moderate GL',
+      note: 'Moderate adjusted carb load; pair with fiber/protein for better stability.',
+    }
+  }
+
+  return {
+    band: 'High GL',
+    note: 'Higher adjusted carb load. Portion control and extra protein/fiber are recommended.',
+  }
 }
 
 function collectNumericFields(value: unknown, prefix = ''): Array<{ key: string; value: number }> {
@@ -672,6 +815,10 @@ async function fetchCandidateRecipes(input: PlannerInput, profile: PlannerProfil
   const pantryText = input.homeIngredients.join(',')
   const signals = buildSearchSignals(desire)
   const intentTerms = getIntentTerms(input)
+  const symptom = getSymptomConfig(input.symptomFocus)
+  const symptomTerms = symptom ? unique([...symptom.searchTerms, ...symptom.titleTokens]) : []
+  const titleQueries = unique([...signals.titleQueries, ...symptomTerms]).slice(0, 8)
+  const keywordQueries = unique([...signals.keywordQueries, ...signals.flavorQueries, ...symptomTerms]).slice(0, 8)
   const hasCaloriesFilter = input.minCalories !== null || input.maxCalories !== null
   const hasProteinFilter = input.minProtein !== null || input.maxProtein !== null
 
@@ -696,7 +843,7 @@ async function fetchCandidateRecipes(input: PlannerInput, profile: PlannerProfil
       )
     }
 
-    const filteredNutritionCandidates = applyNutritionFilters(dedupeRecipes(nutritionCandidates), input)
+    const filteredNutritionCandidates = filterBySymptom(applyNutritionFilters(dedupeRecipes(nutritionCandidates), input), input.symptomFocus)
     if (filteredNutritionCandidates.length) {
       if (desire) {
         const titleMatched = filteredNutritionCandidates.filter((recipe) =>
@@ -708,45 +855,54 @@ async function fetchCandidateRecipes(input: PlannerInput, profile: PlannerProfil
     }
   }
 
+  if (symptom?.maxCarbs !== undefined) {
+    const lowCarbCandidates = applyNutritionFilters(
+      await tryList('/recipe2-api/recipe/recipebycarbs', { max_carbs: String(symptom.maxCarbs) }),
+      input,
+    )
+    const symptomScoped = filterBySymptom(filterByIntent(lowCarbCandidates, intentTerms), input.symptomFocus)
+    if (symptomScoped.length) return symptomScoped
+  }
+
   if (input.useHomeIngredients && input.homeIngredients.length) {
-    const pantryFlavors = unique([desire, ...signals.flavorQueries]).filter(Boolean)
+    const pantryFlavors = unique([desire, ...signals.flavorQueries, ...symptomTerms]).filter(Boolean)
     for (const flavor of pantryFlavors) {
       const list = applyNutritionFilters(await tryList('/recipe2-api/recipe/recipebyingredientsflavor', {
         ingredients: pantryText,
         flavor,
       }), input)
-      const intentList = filterByIntent(list, intentTerms)
+      const intentList = filterBySymptom(filterByIntent(list, intentTerms), input.symptomFocus)
       if (intentList.length) return intentList
     }
     const pantryOnly = applyNutritionFilters(await tryList('/recipe2-api/recipe/recipebyingredientsflavor', {
       ingredients: pantryText,
     }), input)
-    const pantryIntent = filterByIntent(pantryOnly, intentTerms)
+    const pantryIntent = filterBySymptom(filterByIntent(pantryOnly, intentTerms), input.symptomFocus)
     if (pantryIntent.length) return pantryIntent
   }
 
-  for (const titleQuery of signals.titleQueries) {
+  for (const titleQuery of titleQueries) {
     const list = applyNutritionFilters(await tryList('/recipe2-api/recipe/recipebytitle', { title: titleQuery }), input)
-    const intentList = filterByIntent(list, intentTerms)
+    const intentList = filterBySymptom(filterByIntent(list, intentTerms), input.symptomFocus)
     if (intentList.length) return intentList
   }
 
-  for (const keywordQuery of signals.keywordQueries) {
+  for (const keywordQuery of keywordQueries) {
     const list = applyNutritionFilters(await tryList('/recipe2-api/recipe/recipebyingredientsflavor', { flavor: keywordQuery }), input)
-    const intentList = filterByIntent(list, intentTerms)
+    const intentList = filterBySymptom(filterByIntent(list, intentTerms), input.symptomFocus)
     if (intentList.length) return intentList
   }
 
-  for (const flavorQuery of signals.flavorQueries) {
+  for (const flavorQuery of unique([...signals.flavorQueries, ...symptomTerms])) {
     const list = applyNutritionFilters(await tryList('/recipe2-api/recipe/recipebyingredientsflavor', { flavor: flavorQuery }), input)
-    const intentList = filterByIntent(list, intentTerms)
+    const intentList = filterBySymptom(filterByIntent(list, intentTerms), input.symptomFocus)
     if (intentList.length) return intentList
   }
 
   const regionsToTry = unique([...signals.regionQueries, profile.region])
   for (const region of regionsToTry) {
     const list = applyNutritionFilters(await tryList('/recipe2-api/recipe/recipebyregiondiet', { region_diet: region }), input)
-    const intentList = filterByIntent(list, intentTerms)
+    const intentList = filterBySymptom(filterByIntent(list, intentTerms), input.symptomFocus)
     if (intentList.length) return intentList
   }
 
@@ -755,12 +911,17 @@ async function fetchCandidateRecipes(input: PlannerInput, profile: PlannerProfil
   }
 
   const recipeOfDay = await request('/recipe2-api/recipe/recipeofday').catch(() => null)
-  return applyNutritionFilters(getRecipeArray(recipeOfDay), input)
+  return filterBySymptom(applyNutritionFilters(getRecipeArray(recipeOfDay), input), input.symptomFocus)
 }
 
-async function buildChanges(input: PlannerInput, profile: PlannerProfile, recipe: AdaptedRecipe): Promise<RecipeChanges> {
+async function buildChanges(
+  input: PlannerInput,
+  profile: PlannerProfile,
+  recipe: AdaptedRecipe,
+  flavorSwaps: FlavorSwapSuggestion[],
+): Promise<RecipeChanges> {
   const deficiencyTargets = getDeficiencyTargets(profile.deficiencies)
-  const flavorSwaps = await getFlavorSwapSuggestions(input, recipe.name)
+  const symptom = getSymptomConfig(input.symptomFocus)
 
   const originalItems = [
     `[CRAVE] ${input.desire || 'General craving'}`,
@@ -773,6 +934,7 @@ async function buildChanges(input: PlannerInput, profile: PlannerProfile, recipe
     input.minProtein !== null || input.maxProtein !== null
       ? `[PROTEIN TARGET] ${input.minProtein ?? 0} - ${input.maxProtein ?? 'any'} g`
       : '[PROTEIN TARGET] No protein target',
+    symptom ? `[SYMPTOM MODE] ${symptom.label}` : '[SYMPTOM MODE] Off',
   ]
 
   const adaptedItems = [
@@ -783,6 +945,7 @@ async function buildChanges(input: PlannerInput, profile: PlannerProfile, recipe
   if (deficiencyTargets.length) {
     adaptedItems.push(`[NUTRIENT PRIORITY] Prioritized higher ${deficiencyTargets.join(', ')} support`)
   }
+  adaptedItems.push(`[GL BADGE] ${recipe.glycemicLoadBand}`)
   if (flavorSwaps.length) {
     adaptedItems.push(...flavorSwaps.map((swap) => `[FLAVOR SWAP] ${swap.from} -> ${swap.to} (${swap.reason})`))
   }
@@ -794,6 +957,7 @@ async function buildChanges(input: PlannerInput, profile: PlannerProfile, recipe
   else triggersAddressed.push('Improved satiety and protein balance')
   triggersAddressed.push('Inflammation-aware ingredient emphasis')
   if (deficiencyTargets.length) triggersAddressed.push(`Micronutrient focus: ${deficiencyTargets.join(', ')}`)
+  if (symptom) triggersAddressed.push(`Symptom-aware filtering: ${symptom.label}`)
   if (flavorSwaps.length) triggersAddressed.push('Taste-preserving swaps based on FlavorDB pairing signals')
 
   return {
@@ -821,7 +985,13 @@ export async function adaptRecipeForPcos(input: PlannerInput, profile: PlannerPr
   const baseScored = normalized
     .map((recipe, index) => ({
       recipe,
-      score: scoreRecipe(recipe, calcPantryMatchScore(finalCandidates[index], input.homeIngredients), input.desire, intentTerms),
+      score: scoreRecipe(
+        recipe,
+        calcPantryMatchScore(finalCandidates[index], input.homeIngredients),
+        input.desire,
+        intentTerms,
+        input.symptomFocus,
+      ),
     }))
     .sort((a, b) => b.score - a.score)
   const scored = [...baseScored]
@@ -896,6 +1066,9 @@ export async function adaptRecipeForPcos(input: PlannerInput, profile: PlannerPr
   const proteinBonus = selected.protein !== null ? Math.min(selected.protein, 30) : 15
   selected.pcosSafety = Math.max(55, Math.min(98, Math.round(80 + proteinBonus * 0.4 - carbsPenalty * 0.35)))
   selected.flavorSatisfaction = Math.max(70, Math.min(96, Math.round(82 + (input.desire ? 6 : 0))))
+  const glycemic = estimateGlycemicLoad(selected.carbs, selected.protein)
+  selected.glycemicLoadBand = glycemic.band
+  selected.glycemicLoadNote = glycemic.note
 
   if (profile.dietaryRestrictions.length) {
     selected.tags.push(...profile.dietaryRestrictions.slice(0, 2))
@@ -906,8 +1079,15 @@ export async function adaptRecipeForPcos(input: PlannerInput, profile: PlannerPr
   if (deficiencyTargets.length) {
     selected.tags.push(`High ${toNutrientLabel(deficiencyTargets[0])} support`)
   }
+  const symptom = getSymptomConfig(input.symptomFocus)
+  if (symptom) {
+    selected.tags.push(symptom.label)
+  }
 
-  const changes = await buildChanges(input, profile, selected)
+  const flavorSwaps = await getFlavorSwapSuggestions(input, selected.name)
+  selected.swapSuggestions = flavorSwaps
+
+  const changes = await buildChanges(input, profile, selected, flavorSwaps)
   return {
     recipe: selected,
     changes,
@@ -963,31 +1143,38 @@ async function fetchMealPlanCandidates(input: PlannerInput, profile: PlannerProf
   const titles: string[] = []
   const signals = buildSearchSignals(input.desire)
   const intentTerms = getIntentTerms(input)
+  const symptom = getSymptomConfig(input.symptomFocus)
+  const symptomTerms = symptom ? unique([...symptom.searchTerms, ...symptom.titleTokens]) : []
 
-  const titleQueries = unique([input.desire, ...signals.titleQueries, ...signals.keywordQueries]).slice(0, 5)
+  const titleQueries = unique([input.desire, ...signals.titleQueries, ...signals.keywordQueries, ...symptomTerms]).slice(0, 6)
   for (const title of titleQueries) {
     const byTitle = await tryList('/recipe2-api/recipe/recipebytitle', { title })
-    titles.push(...extractRecipeTitles(filterByIntent(byTitle, intentTerms)).slice(0, 6))
+    titles.push(...extractRecipeTitles(filterBySymptom(filterByIntent(byTitle, intentTerms), input.symptomFocus)).slice(0, 6))
   }
 
-  const flavorQueries = unique([input.selectedIntent, ...signals.flavorQueries, input.desire]).filter(Boolean).slice(0, 4)
+  const flavorQueries = unique([input.selectedIntent, ...signals.flavorQueries, input.desire, ...symptomTerms]).filter(Boolean).slice(0, 5)
   for (const flavor of flavorQueries) {
     const byFlavor = await tryList('/recipe2-api/recipe/recipebyingredientsflavor', { flavor })
-    titles.push(...extractRecipeTitles(filterByIntent(byFlavor, intentTerms)).slice(0, 6))
+    titles.push(...extractRecipeTitles(filterBySymptom(filterByIntent(byFlavor, intentTerms), input.symptomFocus)).slice(0, 6))
+  }
+
+  if (symptom?.maxCarbs !== undefined) {
+    const byCarbs = await tryList('/recipe2-api/recipe/recipebycarbs', { max_carbs: String(symptom.maxCarbs) })
+    titles.push(...extractRecipeTitles(filterBySymptom(filterByIntent(byCarbs, intentTerms), input.symptomFocus)).slice(0, 8))
   }
 
   const regionRecipes = await tryList('/recipe2-api/recipe/recipebyregiondiet', { region_diet: profile.region })
-  titles.push(...extractRecipeTitles(filterByIntent(regionRecipes, intentTerms)).slice(0, 8))
+  titles.push(...extractRecipeTitles(filterBySymptom(filterByIntent(regionRecipes, intentTerms), input.symptomFocus)).slice(0, 8))
 
   for (const region of signals.regionQueries) {
     const regionByInput = await tryList('/recipe2-api/recipe/recipebyregiondiet', { region_diet: region })
-    titles.push(...extractRecipeTitles(filterByIntent(regionByInput, intentTerms)).slice(0, 8))
+    titles.push(...extractRecipeTitles(filterBySymptom(filterByIntent(regionByInput, intentTerms), input.symptomFocus)).slice(0, 8))
   }
 
   if (profile.dietaryRestrictions.length) {
     const primaryDiet = profile.dietaryRestrictions[0]
     const dietRecipes = await tryList('/recipe2-api/recipe/recipebyrecipediet', { recipe_diet: primaryDiet })
-    titles.push(...extractRecipeTitles(filterByIntent(dietRecipes, intentTerms)).slice(0, 8))
+    titles.push(...extractRecipeTitles(filterBySymptom(filterByIntent(dietRecipes, intentTerms), input.symptomFocus)).slice(0, 8))
   }
 
   const recipeOfDay = await request('/recipe2-api/recipe/recipeofday').catch(() => null)
@@ -997,12 +1184,14 @@ async function fetchMealPlanCandidates(input: PlannerInput, profile: PlannerProf
 }
 
 export async function fetchMicroMealPlan(input: PlannerInput, profile: PlannerProfile): Promise<MicroMealPlanDay[]> {
+  const symptom = getSymptomConfig(input.symptomFocus)
   const payload = {
     craving: input.desire,
     region_diet: profile.region,
     recipe_diet: profile.dietaryRestrictions.join(','),
     pantry: input.homeIngredients,
-    preference: profile.focus,
+    preference: symptom ? `${profile.focus}; ${symptom.label}` : profile.focus,
+    symptom_focus: input.symptomFocus ?? '',
     days: 2,
   }
   const response = await requestPost('/recipe2-api/recipe/recipemealplan', payload).catch(() => null)

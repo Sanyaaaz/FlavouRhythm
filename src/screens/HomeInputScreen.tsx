@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PixelButton, PixelCard, PixelShell } from '../components/PixelPrimitives'
+import type { SymptomFocus } from '../lib/recipePlannerApi'
 
 const quickSelections = [
   { label: 'Sweet', icon: '[CAKE]' },
@@ -8,6 +9,16 @@ const quickSelections = [
   { label: 'Burger', icon: '[BURGR]' },
   { label: 'South Indian', icon: '[DOSA]' },
   { label: 'Mexican', icon: '[TACO]' },
+]
+
+const symptomOptions: Array<{ label: string; value: SymptomFocus }> = [
+  { label: 'No symptom mode', value: 'none' },
+  { label: 'Insulin spike support', value: 'insulin_spike' },
+  { label: 'Bloating relief', value: 'bloating' },
+  { label: 'Fatigue support', value: 'fatigue' },
+  { label: 'Acne-safe meals', value: 'acne' },
+  { label: 'Period cramps support', value: 'period_cramps' },
+  { label: 'Sugar craving balance', value: 'sugar_cravings' },
 ]
 
 type HomeInputScreenProps = {
@@ -20,6 +31,7 @@ type HomeInputScreenProps = {
     maxCalories: number | null
     minProtein: number | null
     maxProtein: number | null
+    symptomFocus: SymptomFocus | null
   }) => Promise<void> | void
   isLoading?: boolean
   error?: string
@@ -34,6 +46,7 @@ export default function HomeInputScreen({ onAdapt, isLoading = false, error = ''
   const [maxCalories, setMaxCalories] = useState('')
   const [minProtein, setMinProtein] = useState('')
   const [maxProtein, setMaxProtein] = useState('')
+  const [symptomFocus, setSymptomFocus] = useState<SymptomFocus>('none')
 
   const toOptionalNumber = (value: string): number | null => {
     const parsed = Number.parseFloat(value)
@@ -57,6 +70,7 @@ export default function HomeInputScreen({ onAdapt, isLoading = false, error = ''
       maxCalories: toOptionalNumber(maxCalories),
       minProtein: toOptionalNumber(minProtein),
       maxProtein: toOptionalNumber(maxProtein),
+      symptomFocus: symptomFocus === 'none' ? null : symptomFocus,
     })
   }
 
@@ -149,6 +163,22 @@ export default function HomeInputScreen({ onAdapt, isLoading = false, error = ''
             />
           </div>
           <p className="text-xs text-[#7e3f55]">Leave blank to keep nutrition filters off.</p>
+        </div>
+
+        <div className="space-y-2 rounded-lg border-2 border-[#ca8aa2] bg-[#fff1f6] p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#7e3f55]">[SYMPTOM MODE] Optional</p>
+          <select
+            value={symptomFocus}
+            onChange={(event) => setSymptomFocus(event.target.value as SymptomFocus)}
+            className="w-full rounded-md border-2 border-[#c8849c] bg-white px-3 py-2 text-sm outline-none focus:border-[#8d4560]"
+          >
+            {symptomOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[#7e3f55]">Applies symptom-aware filtering without changing your normal flow.</p>
         </div>
 
         {error ? <p className="text-sm font-semibold text-[#8c1d40]">{error}</p> : null}
