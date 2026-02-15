@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { PixelCard } from './components/PixelPrimitives'
+import CravingAssistantWidget from './components/CravingAssistantWidget'
 import LandingScreen from './screens/LandingScreen'
 import LoginScreen from './screens/LoginScreen'
 import OnboardingProfileScreen from './screens/OnboardingProfileScreen'
@@ -419,6 +420,7 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <CravingAssistantWidget profile={profile} />
     </div>
   )
 }
